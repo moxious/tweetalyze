@@ -1,0 +1,19 @@
+{
+  "name": "tweetalyze",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google-cloud/language": "^1.0.0",
+    "@google-cloud/translate": "^1.1.0",
+    "bluebird": "^3.5.1",
+    "google-cloud": "^0.57.0",
+    "lodash": "^4.17.4",
+    "yargs": "^10.0.3"
+  }
+}
