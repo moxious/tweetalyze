@@ -30,6 +30,7 @@ if (!creds.consumer_key || !creds.consumer_secret || !creds.access_token || !cre
 
 const MONGO_COLLECTION = process.env.MONGO_COLLECTION || 'documents';
 const CHECKPOINT_FREQUENCY = process.env.SIPPER_CHECKPOINT_FREQUENCY || 1000;
+const SIPPER_DEBUG = process.env.SIPPER_DEBUG;
 
 const captureExpression = {
   track: process.env.TWITTER_TRACK || 'Russians, #politics, #trumptrain, #MAGA, #Mueller, Kremlin, Putin',
@@ -99,6 +100,7 @@ const insertTweet = tweet => {
         sipperDetails.inserted += cmdResult.result.n;
         if (sipperDetails.captured % CHECKPOINT_FREQUENCY === 0) {
           checkpoint(true);
+          if (SIPPER_DEBUG) { console.log(cmdResult); }
         }
       } else {
         console.log('err', cmdResult);
