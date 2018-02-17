@@ -6,7 +6,7 @@ const moment = require('moment');
 const yargs = require('yargs');
 const Promise = require('bluebird');
 
-const SIPPER_VERSION = '0.08';
+const SIPPER_VERSION = '0.09';
 
 let creds;
 try {
@@ -33,7 +33,7 @@ const CHECKPOINT_FREQUENCY = process.env.SIPPER_CHECKPOINT_FREQUENCY || 1000;
 const SIPPER_DEBUG = process.env.SIPPER_DEBUG;
 
 const captureExpression = {
-  track: process.env.TWITTER_TRACK || 'Russians, #politics, #trumptrain, #MAGA, #Mueller, Kremlin, Putin',
+  track: process.env.TWITTER_TRACK,
 };
 
 const sipperDetails = {
@@ -46,8 +46,9 @@ const sipperDetails = {
   captureExpression,
   captured: 0,
   inserted: 0,
-  ratio: 0,
   errors: 0,
+  warnings: 0,
+  limitNotices: 0,
   label: yargs.argv.label || 'unnamed sipper',
   version: SIPPER_VERSION,
   next_heartbeat: '',
@@ -70,27 +71,21 @@ const checkpoint = (update = false) => {
   const nowStr = moment.utc(now).format();
 
   const elapsedTimeMs = now - sipperDetails.checkpoint;
+  const elapsedTimeMin = elapsedTimeMs / 1000 / 60;
   
   // We captured a set in this many ms, meaning our rate is this many
   // tweets/min.
-  const r = CHECKPOINT_FREQUENCY / (elapsedTimeMs / 1000 / 60);
+  const r = CHECKPOINT_FREQUENCY / elapsedTimeMin;
   
   // An estimate of when the sipper will checkpoint again.  This lets us detect dead 
   // ones that aren't running.
   sipperDetails.next_heartbeat = moment.utc(now + elapsedTimeMs + 1000).format();
 
   // Checkpoint rate for this capture expression.
-  sipperDetails.rate.push({ t: nowStr, r: elapsedTimeMs / CHECKPOINT_FREQUENCY });
+  sipperDetails.rate.push({ t: nowStr, r });
 
   sipperDetails.checkpoint = now;
   sipperDetails.checkpoint_str = nowStr;
-
-  // How much unique stuff we haven't already seen is this sipper getting?
-  try {
-    sipperDetails.ratio = sipperDetails.inserted / sipperDetails.captured;
-  } catch (err) {
-    sipperDetails.ratio = 0;
-  }
 
   console.log(moment.utc().format(),
     'Checkpoint ', sipperDetails.id_str,
@@ -98,7 +93,6 @@ const checkpoint = (update = false) => {
     'inserted:', sipperDetails.inserted,
     'captured:', sipperDetails.captured,
     'rate:', sipperDetails.rate.length > 0 ? sipperDetails.rate[sipperDetails.rate.length - 1].r : 0,
-    'ratio:', sipperDetails.ratio,
     'errors:', sipperDetails.errors,
     'tracking:', captureExpression.track);
 
@@ -137,8 +131,6 @@ const log = (eventType, obj) => {
 };
 
 const handleError = err => {
-  sipperDetails.errors++;
-  
   console.error(moment.utc().format(),
     'Error', sipperDetails.id_str,
     'label:', sipperDetails.label,
@@ -174,9 +166,16 @@ const beginCapture = () => {
 
   stream.on('tweet', insertTweet);
   stream.on('error', handleError);
-  stream.on('limit', msg => log('Limit', msg));
+  stream.on('limit', msg => {
+    // Limit notices indicate you're asking for more data than streaming API
+    // can send.  Increment this counter. For large values, we're missing a lot.
+    sipperDetails.limitNotices++;
+  });
   stream.on('disconnect', msg => log('Disconnect', msg));
-  stream.on('warning', msg => log('Warning', msg));
+  stream.on('warning', msg => {
+    sipperDetails.warnings++;
+    log('Warning', msg);
+  });
   stream.on('status_withheld', msg => log('Withheld', msg));
   stream.on('scrub_geo', msg => log('ScrubGeo', msg));
   stream.on('connected', msg => log('Connected', {}));
