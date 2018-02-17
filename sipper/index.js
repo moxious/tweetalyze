@@ -108,6 +108,15 @@ const insertTweet = tweet => {
     .catch(err => console.error('Upsert failed: ', err));
 };
 
+const handleError = err => {
+  console.error(moment.utc().format(),
+  'Error', sipperDetails.id_str,
+  'label:', sipperDetails.label,
+  'message:', err.message,
+  'code:', err.code,
+  'allErrors:', err.allErrors);
+};
+
 const beginCapture = () => {
   T = new Twit(_.merge(creds, {
     timeout_ms: 60 * 1000,  // optional HTTP request timeout to apply to all requests.
@@ -115,6 +124,7 @@ const beginCapture = () => {
 
   const stream = T.stream('statuses/filter', captureExpression)
   stream.on('tweet', insertTweet);
+  stream.on('error', handleError);
 };
 
 const main = () => {
