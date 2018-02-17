@@ -4,8 +4,9 @@ const Twit = require('twit');
 const MongoClient = require('mongodb').MongoClient;
 const moment = require('moment');
 const yargs = require('yargs');
+const Promise = require('bluebird');
 
-const SIPPER_VERSION = '0.03';
+const SIPPER_VERSION = '0.04';
 
 let creds;
 try {
@@ -23,6 +24,8 @@ if (!creds.consumer_key || !creds.consumer_secret || !creds.access_token || !cre
   throw new Error('Missing credential configuration');
 } else if (!process.env.TWITTER_TRACK) {
   throw new Error('Please define TWITTER_TRACK');
+} if(!yargs.argv.label) {
+  throw new Error('Please call me with --label <name> to name your sipper');
 }
 
 const MONGO_COLLECTION = process.env.MONGO_COLLECTION || 'documents';
@@ -41,6 +44,7 @@ const sipperDetails = {
   captureExpression,
   captured: 0,
   errors: 0,
+  label: yargs.argv.label || 'unnamed sipper',
   version: SIPPER_VERSION,
 
   // Log which account used for capture, but not secrets.
@@ -99,10 +103,19 @@ const beginCapture = () => {
   stream.on('tweet', insertTweet);
 };
 
-MongoClient.connect(url, (err, client) => {
-  dbConnection = client.db(dbName);
-  collection = dbConnection.collection(MONGO_COLLECTION);
+const main = () => {
+  return MongoClient.connect(url)
+    .then(client => {
+    dbConnection = client.db(dbName);
+    collection = dbConnection.collection(MONGO_COLLECTION);
 
-  checkpoint();
-  beginCapture();
-});
+    checkpoint();
+    return beginCapture();
+  })
+  .catch(err => {
+    console.error('Outer error caught; terminating', err);
+  });
+};
+
+
+main();
