@@ -100,7 +100,6 @@ const insertTweet = tweet => {
         sipperDetails.inserted += cmdResult.result.n;
         if (sipperDetails.captured % CHECKPOINT_FREQUENCY === 0) {
           checkpoint(true);
-          if (SIPPER_DEBUG) { console.log(cmdResult); }
         }
       } else {
         console.log('err', cmdResult);
@@ -155,7 +154,7 @@ const beginCapture = () => {
   stream.on('warning', msg => log('Warning', msg));
   stream.on('status_withheld', msg => log('Withheld', msg));
   stream.on('scrub_geo', msg => log('ScrubGeo', msg));
-  stream.on('connected', msg => log('Connected', msg));
+  stream.on('connected', msg => log('Connected', {}));
 };
 
 const main = () => {
