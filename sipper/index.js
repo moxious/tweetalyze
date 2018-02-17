@@ -57,7 +57,8 @@ const insertTweet = tweet => {
           checkpoint();
         }
       } else {
-        sipper.errors++;
+        console.log('err', result);
+        sipperDetails.errors++;
       }
     })
     .catch(err => console.error('Upsert failed: ', err));
