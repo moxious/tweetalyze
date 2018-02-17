@@ -46,6 +46,7 @@ const sipperDetails = {
   captureExpression,
   captured: 0,
   inserted: 0,
+  ratio: 0,
   errors: 0,
   label: yargs.argv.label || 'unnamed sipper',
   version: SIPPER_VERSION,
@@ -84,6 +85,7 @@ const checkpoint = (update = false) => {
     'version:', sipperDetails.version,
     'inserted:', sipperDetails.inserted,
     'captured:', sipperDetails.captured,
+    'rate:', sipperDetails.rate[sipperDetails.rate.length - 1],
     'ratio:', sipperDetails.ratio,
     'errors:', sipperDetails.errors,
     'tracking:', captureExpression.track);
