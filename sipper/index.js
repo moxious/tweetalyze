@@ -28,7 +28,7 @@ let T = null;
 const creds = require('./creds.json');
 
 const updateSipper = (update = false) => {
-  const op = update ? { $set: sipperDetails } ? { $setOnInsert: sipperDetails };
+  const op = update ? { $set: sipperDetails } : { $setOnInsert: sipperDetails };
   const options = { upsert: true };
 
   return collection.updateOne({ id_str: sipperDetails.id_str }, op, options)
@@ -43,7 +43,7 @@ const insertTweet = tweet => {
     .then(result => {
       if (result.ok) {
         sipperDetails.captured++;
-        if (sipperDetails.captured % 1000 === 0) { console.log('Checkpoint ', sipperDetails.id_str, sipperDetails.captured); }
+        if (sipperDetails.captured % 10 === 0) { console.log('Checkpoint ', sipperDetails.id_str, sipperDetails.captured); }
         updateSipper();
       }
       console.log(result);
