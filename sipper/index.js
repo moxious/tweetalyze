@@ -6,7 +6,7 @@ const moment = require('moment');
 const yargs = require('yargs');
 const Promise = require('bluebird');
 
-const SIPPER_VERSION = '0.04';
+const SIPPER_VERSION = '0.05';
 
 let creds;
 try {
@@ -43,6 +43,7 @@ const sipperDetails = {
   checkpoint_str: moment.utc().format(),
   captureExpression,
   captured: 0,
+  inserted: 0,
   errors: 0,
   label: yargs.argv.label || 'unnamed sipper',
   version: SIPPER_VERSION,
@@ -63,6 +64,13 @@ let T = null;
 const checkpoint = (update = false) => {
   sipperDetails.checkpoint = moment.utc().valueOf();
   sipperDetails.checkpoint_str = moment.utc().format();
+  
+  // How much unique stuff we haven't already seen is this sipper getting?
+  try {
+    sipperDetails.ratio = sipperDetails.inserted / sipperDetails.captured;
+  } catch(err) {
+    sipperDetails.ratio = 0;
+  }
 
   console.log(moment.utc().format(), 'Checkpoint ', sipperDetails.id_str, 
     'captured:', sipperDetails.captured, 'errors:', sipperDetails.errors, 
@@ -83,6 +91,7 @@ const insertTweet = tweet => {
     .then(cmdResult => {
       if (cmdResult.result.ok) {
         sipperDetails.captured++;
+        sipperDetails.inserted += cmdResult.result.n;
         if (sipperDetails.captured % CHECKPOINT_FREQUENCY === 0) {
           checkpoint(true);
         }
