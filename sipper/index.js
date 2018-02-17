@@ -6,7 +6,7 @@ const moment = require('moment');
 const yargs = require('yargs');
 const Promise = require('bluebird');
 
-const SIPPER_VERSION = '0.07';
+const SIPPER_VERSION = '0.08';
 
 let creds;
 try {
@@ -71,8 +71,9 @@ const checkpoint = (update = false) => {
 
   const elapsedTimeMs = now - sipperDetails.checkpoint;
   
-  // We captured a set in this many ms, meaning our rate is one tweet every r.
-  const r = elapsedTimeMs / CHECKPOINT_FREQUENCY;
+  // We captured a set in this many ms, meaning our rate is this many
+  // tweets/min.
+  const r = CHECKPOINT_FREQUENCY / (elapsedTimeMs / 1000 / 60);
   
   // An estimate of when the sipper will checkpoint again.  This lets us detect dead 
   // ones that aren't running.
@@ -136,6 +137,8 @@ const log = (eventType, obj) => {
 };
 
 const handleError = err => {
+  sipperDetails.errors++;
+  
   console.error(moment.utc().format(),
     'Error', sipperDetails.id_str,
     'label:', sipperDetails.label,
