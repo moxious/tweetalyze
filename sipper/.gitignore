@@ -2,3 +2,4 @@ node_modules
 creds.json
 *.sip
 *.log
+*.swp

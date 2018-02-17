@@ -5,7 +5,7 @@ const MongoClient = require('mongodb').MongoClient;
 const moment = require('moment');
 const yargs = require('yargs');
 
-const SIPPER_VERSION = '0.01';
+const SIPPER_VERSION = '0.03';
 
 let creds;
 try {
@@ -19,12 +19,14 @@ try {
   };
 }
 
-const MONGO_COLLECTION = 'documents';
-const CHECKPOINT_FREQUENCY = 1000;
-
-if (!process.env.TWITTER_TRACK) {
-  console.warn('Please define env var TWITTER_TRACK to specify what to track.');
+if (!creds.consumer_key || !creds.consumer_secret || !creds.access_token || !creds.access_token_secret) {
+  throw new Error('Missing credential configuration');
+} else if (!process.env.TWITTER_TRACK) {
+  throw new Error('Please define TWITTER_TRACK');
 }
+
+const MONGO_COLLECTION = process.env.MONGO_COLLECTION || 'documents';
+const CHECKPOINT_FREQUENCY = 1000;
 
 const captureExpression = {
   track: process.env.TWITTER_TRACK || 'Russians, #politics, #trumptrain, #MAGA, #Mueller, Kremlin, Putin',
@@ -40,6 +42,10 @@ const sipperDetails = {
   captured: 0,
   errors: 0,
   version: SIPPER_VERSION,
+
+  // Log which account used for capture, but not secrets.
+  consumer_key: creds.consumer_key,
+  access_token: creds.access_token,
 };
 
 const sipperID = uuid.v4();
@@ -54,8 +60,9 @@ const checkpoint = (update = false) => {
   sipperDetails.checkpoint = moment.utc().valueOf();
   sipperDetails.checkpoint_str = moment.utc().format();
 
-  console.log('Checkpoint ', sipperDetails.id_str, 'captured:',
-    sipperDetails.captured, 'errors:', sipperDetails.errors, 'tracking:', captureExpression.track);
+  console.log(moment.utc().format(), 'Checkpoint ', sipperDetails.id_str, 
+    'captured:', sipperDetails.captured, 'errors:', sipperDetails.errors, 
+    'tracking:', captureExpression.track);
 
   const op = update ? { $set: sipperDetails } : { $setOnInsert: sipperDetails };
   const options = { upsert: true };
@@ -92,9 +99,6 @@ const beginCapture = () => {
   stream.on('tweet', insertTweet);
 };
 
-console.log(yargs.argv);
-
-/*
 MongoClient.connect(url, (err, client) => {
   dbConnection = client.db(dbName);
   collection = dbConnection.collection(MONGO_COLLECTION);
@@ -102,4 +106,3 @@ MongoClient.connect(url, (err, client) => {
   checkpoint();
   beginCapture();
 });
-*/
