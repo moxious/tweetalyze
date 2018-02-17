@@ -1,6 +1,23 @@
+const uuid = require('uuid');
 const _ = require('lodash');
 const Twit = require('twit');
 const MongoClient = require('mongodb').MongoClient;
+const moment = require('moment');
+
+const MONGO_COLLECTION = 'documents';
+
+const captureExpression = { 
+  track: 'Russians, #politics, #trumptrain, #MAGA, #Mueller, Kremlin, Putin',
+};
+
+const sipperDetails = {
+  id_str: uuid.v4(),
+  date: moment.utc().format(),
+  captureExpression,
+  captured: 0,
+};
+
+const sipperID = uuid.v4();
 
 const url = 'mongodb://localhost:27017';
 const dbName = 'twitter';
@@ -10,7 +27,13 @@ let T = null;
 
 const creds = require('./creds.json');
 
-let c = 0;
+const updateSipper = (update = false) => {
+  const op = update ? { $set: sipperDetails } ? { $setOnInsert: sipperDetails };
+  const options = { upsert: true };
+
+  return collection.updateOne({ id_str: sipperDetails.id_str }, op, options)
+    .catch(err => console.error('Error updating sipper: ', err));
+};
 
 const insertTweet = tweet => {
   const findCriteria = _.pick(tweet, ["id_str"]);
@@ -18,18 +41,14 @@ const insertTweet = tweet => {
   // Depends on id_str index.
   return collection.updateOne(findCriteria, { $setOnInsert: tweet }, { upsert: true })
     .then(result => {
+      if (result.ok) {
+        sipperDetails.captured++;
+        if (sipperDetails.captured % 1000 === 0) { console.log('Checkpoint ', sipperDetails.id_str, sipperDetails.captured); }
+        updateSipper();
+      }
       console.log(result);
     })
     .catch(err => console.error('Upsert failed: ', err));
-
-  // collection.insert([tweet], (err, result) => {
-  //   if (err) { console.error(err); }
-  //   else if (result.result.n !== 1) { console.error('Unexpected result ', result); }
-  //   else {
-  //     c++;
-  //     if (c % 1000 === 0) { console.log('Checkpoint ', c); }
-  //   }
-  // });
 };
 
 const beginCapture = () => {
@@ -37,12 +56,13 @@ const beginCapture = () => {
     timeout_ms: 60 * 1000,  // optional HTTP request timeout to apply to all requests.
   }));
 
-  var stream = T.stream('statuses/filter', { track: 'Russians, #politics, #trumptrain, #MAGA, #Mueller, Kremlin, Putin', language: 'en' })
+  const stream = T.stream('statuses/filter', captureExpression)
   stream.on('tweet', insertTweet);
 };
 
 MongoClient.connect(url, (err, client) => {
   dbConnection = client.db(dbName);
-  collection = dbConnection.collection('documents');
+  collection = dbConnection.collection(MONGO_COLLECTION);
+  
   beginCapture();
 });
