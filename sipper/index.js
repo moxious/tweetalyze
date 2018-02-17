@@ -3,8 +3,9 @@ const _ = require('lodash');
 const Twit = require('twit');
 const MongoClient = require('mongodb').MongoClient;
 const moment = require('moment');
+const yargs = require('yargs');
 
-const VERSION = '0.01';
+const SIPPER_VERSION = '0.01';
 
 let creds;
 try {
@@ -91,6 +92,9 @@ const beginCapture = () => {
   stream.on('tweet', insertTweet);
 };
 
+console.log(yargs.argv);
+
+/*
 MongoClient.connect(url, (err, client) => {
   dbConnection = client.db(dbName);
   collection = dbConnection.collection(MONGO_COLLECTION);
@@ -98,3 +102,4 @@ MongoClient.connect(url, (err, client) => {
   checkpoint();
   beginCapture();
 });
+*/
