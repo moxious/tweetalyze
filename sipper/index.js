@@ -58,6 +58,7 @@ const sipperID = uuid.v4();
 
 const url = 'mongodb://localhost:27017';
 const dbName = 'twitter';
+let mongoClient = null;
 let dbConnection = null;
 let collection = null;
 let T = null;
@@ -141,7 +142,7 @@ const beginCapture = () => {
 
   process.on('SIGINT', () => {
     log('SIGINT', { message: 'Shutting down' });
-    dbConnection.close();
+    mongoClient.close();
     if (stream) { stream.stop(); }
   });
 
@@ -160,6 +161,7 @@ const beginCapture = () => {
 const main = () => {
   return MongoClient.connect(url)
     .then(client => {
+      mongoClient = client;
       dbConnection = client.db(dbName);
       collection = dbConnection.collection(MONGO_COLLECTION);
 
