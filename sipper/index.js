@@ -153,7 +153,9 @@ const beginCapture = () => {
   T.get('statuses/home_timeline', function (err, reply) {
     if (err) {
       return log('API Not Working', err);
-    };
+    } else {
+      log('API Working', !_.isEmpty(reply));
+    }
   });
 
   const stream = T.stream('statuses/filter', captureExpression)
