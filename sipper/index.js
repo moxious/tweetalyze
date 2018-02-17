@@ -3,13 +3,28 @@ const _ = require('lodash');
 const Twit = require('twit');
 const MongoClient = require('mongodb').MongoClient;
 const moment = require('moment');
-const creds = require('./creds.json');
+
+let creds;
+try {
+  creds = require('./creds.json');
+} catch(err) {
+  creds = {
+    consumer_key: process.env.TWITTER_CONSUMER_KEY,
+    consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
+    access_token: process.env.TWITTER_ACCESS_TOKEN,
+    access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET,
+  };
+}
 
 const MONGO_COLLECTION = 'documents';
-const CHECKPOINT_FREQUENCY = 10;
+const CHECKPOINT_FREQUENCY = 1000;
+
+if (!process.env.TWITTER_TRACK) {
+  console.warn('Please define env var TWITTER_TRACK to specify what to track.');
+}
 
 const captureExpression = {
-  track: 'Russians, #politics, #trumptrain, #MAGA, #Mueller, Kremlin, Putin',
+  track: process.env.TWITTER_TRACK || 'Russians, #politics, #trumptrain, #MAGA, #Mueller, Kremlin, Putin',
 };
 
 const sipperDetails = {
@@ -36,7 +51,7 @@ const checkpoint = (update = false) => {
   sipperDetails.checkpoint_str = moment.utc().valueOf();
 
   console.log('Checkpoint ', sipperDetails.id_str, 'captured:',
-    sipperDetails.captured, 'errors:', sipperDetails.errors);
+    sipperDetails.captured, 'errors:', sipperDetails.errors, 'tracking:', captureExpression.track);
 
   const op = update ? { $set: sipperDetails } : { $setOnInsert: sipperDetails };
   const options = { upsert: true };
