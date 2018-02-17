@@ -72,8 +72,13 @@ const checkpoint = (update = false) => {
     sipperDetails.ratio = 0;
   }
 
-  console.log(moment.utc().format(), 'Checkpoint ', sipperDetails.id_str, 
-    'captured:', sipperDetails.captured, 'errors:', sipperDetails.errors, 
+  console.log(moment.utc().format(), 
+    'Checkpoint ', sipperDetails.id_str,
+    'version:', sipperDetails.version,
+    'inserted:', sipperDetails.inserted,
+    'captured:', sipperDetails.captured, 
+    'ratio:', sipperDetails.ratio,
+    'errors:', sipperDetails.errors, 
     'tracking:', captureExpression.track);
 
   const op = update ? { $set: sipperDetails } : { $setOnInsert: sipperDetails };
