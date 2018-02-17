@@ -6,7 +6,7 @@ const moment = require('moment');
 const yargs = require('yargs');
 const Promise = require('bluebird');
 
-const SIPPER_VERSION = '0.05';
+const SIPPER_VERSION = '0.06';
 
 let creds;
 try {
@@ -42,6 +42,7 @@ const sipperDetails = {
   started: moment.utc().valueOf(),
   checkpoint: moment.utc().valueOf(),
   checkpoint_str: moment.utc().format(),
+  rate: [],
   captureExpression,
   captured: 0,
   inserted: 0,
@@ -64,6 +65,10 @@ let collection = null;
 let T = null;
 
 const checkpoint = (update = false) => {
+  const elapsedTimeMs = moment.utc().valueOf() - sipperDetails.checkpoint;
+  // We captured a set in this many ms, meaning our rate is...
+  sipperDetails.rate.push(elapsedTimeMs / CHECKPOINT_FREQUENCY);
+
   sipperDetails.checkpoint = moment.utc().valueOf();
   sipperDetails.checkpoint_str = moment.utc().format();
 
@@ -144,6 +149,7 @@ const beginCapture = () => {
     log('SIGINT', { message: 'Shutting down' });
     mongoClient.close();
     if (stream) { stream.stop(); }
+    process.exit(1);
   });
 
   console.log('Beginning capture');
