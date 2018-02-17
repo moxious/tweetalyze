@@ -96,7 +96,7 @@ const checkpoint = (update = false) => {
     'version:', sipperDetails.version,
     'inserted:', sipperDetails.inserted,
     'captured:', sipperDetails.captured,
-    'rate:', sipperDetails.rate[sipperDetails.rate.length - 1].r,
+    'rate:', sipperDetails.rate.length > 0 ? sipperDetails.rate[sipperDetails.rate.length - 1].r : 0,
     'ratio:', sipperDetails.ratio,
     'errors:', sipperDetails.errors,
     'tracking:', captureExpression.track);
