@@ -51,7 +51,7 @@ let T = null;
 
 const checkpoint = (update = false) => {
   sipperDetails.checkpoint = moment.utc().valueOf();
-  sipperDetails.checkpoint_str = moment.utc().valueOf();
+  sipperDetails.checkpoint_str = moment.utc().format();
 
   console.log('Checkpoint ', sipperDetails.id_str, 'captured:',
     sipperDetails.captured, 'errors:', sipperDetails.errors, 'tracking:', captureExpression.track);
