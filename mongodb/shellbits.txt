@@ -5,3 +5,5 @@ db.documents.count();
 db.documents.createIndex({ id_str: 1 }, { background: true, unique: false })
 db.documents.createIndex({ "user.screen_name": 1 }, { background: true, unique: false })
 
+// For finding, dealing with sipper status documents.
+db.documents.createIndex({ version: 1 }, { partialFilterExpression: { version: { $exists: true }}})

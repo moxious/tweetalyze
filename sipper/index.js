@@ -4,6 +4,8 @@ const Twit = require('twit');
 const MongoClient = require('mongodb').MongoClient;
 const moment = require('moment');
 
+const VERSION = '0.01';
+
 let creds;
 try {
   creds = require('./creds.json');
@@ -36,6 +38,7 @@ const sipperDetails = {
   captureExpression,
   captured: 0,
   errors: 0,
+  version: SIPPER_VERSION,
 };
 
 const sipperID = uuid.v4();
@@ -69,7 +72,7 @@ const insertTweet = tweet => {
       if (cmdResult.result.ok) {
         sipperDetails.captured++;
         if (sipperDetails.captured % CHECKPOINT_FREQUENCY === 0) {
-          checkpoint();
+          checkpoint(true);
         }
       } else {
         console.log('err', cmdResult);
@@ -92,5 +95,6 @@ MongoClient.connect(url, (err, client) => {
   dbConnection = client.db(dbName);
   collection = dbConnection.collection(MONGO_COLLECTION);
 
+  checkpoint();
   beginCapture();
 });
