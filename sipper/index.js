@@ -50,14 +50,14 @@ const insertTweet = tweet => {
 
   // Depends on id_str index.
   return collection.updateOne(findCriteria, { $setOnInsert: tweet }, { upsert: true })
-    .then(result => {
-      if (result.ok) {
+    .then(cmdResult => {
+      if (cmdResult.result.ok) {
         sipperDetails.captured++;
         if (sipperDetails.captured % CHECKPOINT_FREQUENCY === 0) {
           checkpoint();
         }
       } else {
-        console.log('err', result);
+        console.log('err', cmdResult);
         sipperDetails.errors++;
       }
     })
