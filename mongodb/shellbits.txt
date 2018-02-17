@@ -7,3 +7,9 @@ db.documents.createIndex({ "user.screen_name": 1 }, { background: true, unique: 
 
 // For finding, dealing with sipper status documents.
 db.documents.createIndex({ version: 1 }, { partialFilterExpression: { version: { $exists: true }}})
+
+// How many geo-tagged.
+db.documents.find({ "geo": { $ne: null } }).count()
+
+// Status of all sippers.
+db.documents.find({ "version": "0.05" }).map(d => { return { last: d.checkpoint_str, ratio: d.ratio, captured: d.captured, label: d.label }; });
