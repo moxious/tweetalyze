@@ -12,4 +12,14 @@ db.documents.createIndex({ version: 1 }, { partialFilterExpression: { version: {
 db.documents.find({ "geo": { $ne: null } }).count()
 
 // Status of all sippers.
-db.documents.find({ "version": "0.05" }).map(d => { return { last: d.checkpoint_str, ratio: d.ratio, captured: d.captured, label: d.label }; });
+db.documents.find({ "version": "0.07" }).map(d => { 
+        return { 
+            last: d.checkpoint_str, 
+            ratio: d.ratio,
+            tracking: d.captureExpression.track,
+            captured: d.captured, 
+            label: d.label,
+            rate: d.rate[d.rate.length-1].r,
+            next_heartbeat: d.next_heartbeat
+        }; 
+    });
