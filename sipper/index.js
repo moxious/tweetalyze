@@ -11,7 +11,7 @@ const SIPPER_VERSION = '0.05';
 let creds;
 try {
   creds = require('./creds.json');
-} catch(err) {
+} catch (err) {
   creds = {
     consumer_key: process.env.TWITTER_CONSUMER_KEY,
     consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
@@ -24,7 +24,7 @@ if (!creds.consumer_key || !creds.consumer_secret || !creds.access_token || !cre
   throw new Error('Missing credential configuration');
 } else if (!process.env.TWITTER_TRACK) {
   throw new Error('Please define TWITTER_TRACK');
-} if(!yargs.argv.label) {
+} if (!yargs.argv.label) {
   throw new Error('Please call me with --label <name> to name your sipper');
 }
 
@@ -65,21 +65,21 @@ let T = null;
 const checkpoint = (update = false) => {
   sipperDetails.checkpoint = moment.utc().valueOf();
   sipperDetails.checkpoint_str = moment.utc().format();
-  
+
   // How much unique stuff we haven't already seen is this sipper getting?
   try {
     sipperDetails.ratio = sipperDetails.inserted / sipperDetails.captured;
-  } catch(err) {
+  } catch (err) {
     sipperDetails.ratio = 0;
   }
 
-  console.log(moment.utc().format(), 
+  console.log(moment.utc().format(),
     'Checkpoint ', sipperDetails.id_str,
     'version:', sipperDetails.version,
     'inserted:', sipperDetails.inserted,
-    'captured:', sipperDetails.captured, 
+    'captured:', sipperDetails.captured,
     'ratio:', sipperDetails.ratio,
-    'errors:', sipperDetails.errors, 
+    'errors:', sipperDetails.errors,
     'tracking:', captureExpression.track);
 
   const op = update ? { $set: sipperDetails } : { $setOnInsert: sipperDetails };
@@ -110,13 +110,20 @@ const insertTweet = tweet => {
     .catch(err => console.error('Upsert failed: ', err));
 };
 
+const log = (eventType, obj) => {
+  console.error(moment.utc().format(),
+    eventType, sipperDetails.id_str,
+    'label:', sipperDetails.label,
+    obj);
+};
+
 const handleError = err => {
   console.error(moment.utc().format(),
-  'Error', sipperDetails.id_str,
-  'label:', sipperDetails.label,
-  'message:', err.message,
-  'code:', err.code,
-  'allErrors:', err.allErrors);
+    'Error', sipperDetails.id_str,
+    'label:', sipperDetails.label,
+    'message:', err.message,
+    'code:', err.code,
+    'allErrors:', err.allErrors);
 };
 
 const beginCapture = () => {
@@ -127,20 +134,26 @@ const beginCapture = () => {
   const stream = T.stream('statuses/filter', captureExpression)
   stream.on('tweet', insertTweet);
   stream.on('error', handleError);
+  stream.on('limit', msg => log('Limit', msg));
+  stream.on('disconnect', msg => log('Disconnect', msg));
+  stream.on('warning', msg => log('Warning', msg));
+  stream.on('status_withheld', msg => log('Withheld', msg));
+  stream.on('scrub_geo', msg => log('ScrubGeo', msg));
+  stream.on('connected', msg => log('Connected', msg));
 };
 
 const main = () => {
   return MongoClient.connect(url)
     .then(client => {
-    dbConnection = client.db(dbName);
-    collection = dbConnection.collection(MONGO_COLLECTION);
+      dbConnection = client.db(dbName);
+      collection = dbConnection.collection(MONGO_COLLECTION);
 
-    checkpoint();
-    return beginCapture();
-  })
-  .catch(err => {
-    console.error('Outer error caught; terminating', err);
-  });
+      checkpoint();
+      return beginCapture();
+    })
+    .catch(err => {
+      console.error('Outer error caught; terminating', err);
+    });
 };
 
 
