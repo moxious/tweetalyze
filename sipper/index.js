@@ -16,7 +16,7 @@ const insertTweet = tweet => {
   const findCriteria = _.pick(tweet, ["id_str"]);
 
   // Depends on id_str index.
-  collection.updateOne(findCriteria, { $set: tweet }, { upsert: true })
+  return collection.updateOne(findCriteria, { $setOnInsert: tweet }, { upsert: true })
     .then(result => {
       console.log(result);
     })
