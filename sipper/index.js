@@ -6,7 +6,7 @@ const moment = require('moment');
 const yargs = require('yargs');
 const Promise = require('bluebird');
 
-const SIPPER_VERSION = '0.06';
+const SIPPER_VERSION = '0.07';
 
 let creds;
 try {
@@ -50,7 +50,7 @@ const sipperDetails = {
   errors: 0,
   label: yargs.argv.label || 'unnamed sipper',
   version: SIPPER_VERSION,
-
+  next_heartbeat: '',
   // Log which account used for capture, but not secrets.
   consumer_key: creds.consumer_key,
   access_token: creds.access_token,
@@ -66,12 +66,23 @@ let collection = null;
 let T = null;
 
 const checkpoint = (update = false) => {
-  const elapsedTimeMs = moment.utc().valueOf() - sipperDetails.checkpoint;
-  // We captured a set in this many ms, meaning our rate is...
-  sipperDetails.rate.push(elapsedTimeMs / CHECKPOINT_FREQUENCY);
+  const now = moment.utc().valueOf();
+  const nowStr = moment.utc(now).format();
 
-  sipperDetails.checkpoint = moment.utc().valueOf();
-  sipperDetails.checkpoint_str = moment.utc().format();
+  const elapsedTimeMs = now - sipperDetails.checkpoint;
+  
+  // We captured a set in this many ms, meaning our rate is one tweet every r.
+  const r = elapsedTimeMs / CHECKPOINT_FREQUENCY;
+  
+  // An estimate of when the sipper will checkpoint again.  This lets us detect dead 
+  // ones that aren't running.
+  sipperDetails.next_heartbeat = moment.utc(now + elapsedTimeMs + 1000).format();
+
+  // Checkpoint rate for this capture expression.
+  sipperDetails.rate.push({ t: nowStr, r: elapsedTimeMs / CHECKPOINT_FREQUENCY });
+
+  sipperDetails.checkpoint = now;
+  sipperDetails.checkpoint_str = nowStr;
 
   // How much unique stuff we haven't already seen is this sipper getting?
   try {
@@ -85,7 +96,7 @@ const checkpoint = (update = false) => {
     'version:', sipperDetails.version,
     'inserted:', sipperDetails.inserted,
     'captured:', sipperDetails.captured,
-    'rate:', sipperDetails.rate[sipperDetails.rate.length - 1],
+    'rate:', sipperDetails.rate[sipperDetails.rate.length - 1].r,
     'ratio:', sipperDetails.ratio,
     'errors:', sipperDetails.errors,
     'tracking:', captureExpression.track);
