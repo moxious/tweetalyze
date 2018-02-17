@@ -1,0 +1,7 @@
+MATCH (u:URL)
+SET u.domain = apoc.data.domain(u.url)
+RETURN count(u);
+
+MATCH (m:Media)
+SET m.domain = apoc.data.domain(m.url)
+RETURN count(m);

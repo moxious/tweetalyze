@@ -84,11 +84,6 @@ SET t.language = result
 RETURN count(t);
 
 /* Only supports english */
-MATCH (t:Tweet { language: "en" })
-CALL ga.nlp.annotate({text: t.text, id: id(t)})
-YIELD result
-MERGE (t)-[:HAS_ANNOTATED_TEXT]->(result)
-RETURN count(result);
 
 /* Enrich */
 MATCH (n:Tag)
@@ -96,3 +91,23 @@ CALL ga.nlp.enrich.concept({tag: n, depth:2, admittedRelationships:["IsA","PartO
 YIELD result
 RETURN count(result);
 
+/* Show related relationships */
+MATCH (t:Tag { value: 'election' })-[r]-(ot:Tag) 
+return t.value, type(r), ot.value;
+
+MATCH (t:Tweet)-[]-(a:AnnotatedText) 
+CALL ga.nlp.sentiment(a) YIELD result 
+RETURN count(result);
+
+/* Talking about the clintons */
+MATCH (:NER_Person {value: 'clintons'})-[]-(s:Sentence)-[]-(:AnnotatedText)-[]-(tweet:Tweet) 
+RETURN distinct tweet.text;
+
+
+/* Which people does he talk about the most? *
+MATCH (t:NER_Person)--(:TagOccurrence)--(:Sentence)--(:AnnotatedText)--(tw:Tweet) 
+WHERE not t:NER_O return distinct t.value, labels(t), count(tw) as x order by x desc limit 10;
+
+
+MATCH (t:NER_Organization)--(:TagOccurrence)--(:Sentence)--(:AnnotatedText)--(tw:Tweet) 
+WHERE not t:NER_O return distinct t.value, labels(t), count(tw) as x order by x desc limit 10;
