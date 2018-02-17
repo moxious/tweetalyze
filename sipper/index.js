@@ -3,18 +3,24 @@ const _ = require('lodash');
 const Twit = require('twit');
 const MongoClient = require('mongodb').MongoClient;
 const moment = require('moment');
+const creds = require('./creds.json');
 
 const MONGO_COLLECTION = 'documents';
+const CHECKPOINT_FREQUENCY = 10;
 
-const captureExpression = { 
+const captureExpression = {
   track: 'Russians, #politics, #trumptrain, #MAGA, #Mueller, Kremlin, Putin',
 };
 
 const sipperDetails = {
   id_str: uuid.v4(),
-  date: moment.utc().format(),
+  started_str: moment.utc().format(),
+  started: moment.utc().valueOf(),
+  checkpoint: moment.utc().valueOf(),
+  checkpoint_str: moment.utc().format(),
   captureExpression,
   captured: 0,
+  errors: 0,
 };
 
 const sipperID = uuid.v4();
@@ -25,9 +31,13 @@ let dbConnection = null;
 let collection = null;
 let T = null;
 
-const creds = require('./creds.json');
+const checkpoint = (update = false) => {
+  sipperDetails.checkpoint = moment.utc().valueOf();
+  sipperDetails.checkpoint_str = moment.utc().valueOf();
 
-const updateSipper = (update = false) => {
+  console.log('Checkpoint ', sipperDetails.id_str, 'captured:',
+    sipperDetails.captured, 'errors:', sipperDetails.errors);
+
   const op = update ? { $set: sipperDetails } : { $setOnInsert: sipperDetails };
   const options = { upsert: true };
 
@@ -43,10 +53,12 @@ const insertTweet = tweet => {
     .then(result => {
       if (result.ok) {
         sipperDetails.captured++;
-        if (sipperDetails.captured % 10 === 0) { console.log('Checkpoint ', sipperDetails.id_str, sipperDetails.captured); }
-        updateSipper();
+        if (sipperDetails.captured % CHECKPOINT_FREQUENCY === 0) {
+          checkpoint();
+        }
+      } else {
+        sipper.errors++;
       }
-      console.log(result);
     })
     .catch(err => console.error('Upsert failed: ', err));
 };
@@ -63,6 +75,6 @@ const beginCapture = () => {
 MongoClient.connect(url, (err, client) => {
   dbConnection = client.db(dbName);
   collection = dbConnection.collection(MONGO_COLLECTION);
-  
+
   beginCapture();
 });
