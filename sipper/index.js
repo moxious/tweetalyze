@@ -29,7 +29,7 @@ if (!creds.consumer_key || !creds.consumer_secret || !creds.access_token || !cre
 }
 
 const MONGO_COLLECTION = process.env.MONGO_COLLECTION || 'documents';
-const CHECKPOINT_FREQUENCY = 1000;
+const CHECKPOINT_FREQUENCY = process.env.SIPPER_CHECKPOINT_FREQUENCY || 1000;
 
 const captureExpression = {
   track: process.env.TWITTER_TRACK || 'Russians, #politics, #trumptrain, #MAGA, #Mueller, Kremlin, Putin',
