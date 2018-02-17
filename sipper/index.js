@@ -131,7 +131,23 @@ const beginCapture = () => {
     timeout_ms: 60 * 1000,  // optional HTTP request timeout to apply to all requests.
   }));
 
+  // Sample query to see if auth works, etc.
+  T.get('statuses/home_timeline', function (err, reply) {
+    if (err) {
+      return log('API Not Working', err);
+    };
+  });
+
   const stream = T.stream('statuses/filter', captureExpression)
+
+  process.on('SIGINT', () => {
+    log('SIGINT', { message: 'Shutting down' });
+    dbConnection.close();
+    if (stream) { stream.stop(); }
+  });
+
+  console.log('Beginning capture');
+
   stream.on('tweet', insertTweet);
   stream.on('error', handleError);
   stream.on('limit', msg => log('Limit', msg));
