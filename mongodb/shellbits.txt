@@ -14,8 +14,8 @@ db.documents.find({ "geo": { $ne: null } }).count()
 // Status of all sippers.
 db.documents.find({ "version": "0.09" }).map(d => { 
         return { 
+            id_str: d.id_str,
             last: d.checkpoint_str, 
-            ratio: d.ratio,
             tracking: d.captureExpression.track,
             captured: d.captured, 
             label: d.label,
@@ -24,3 +24,11 @@ db.documents.find({ "version": "0.09" }).map(d => {
             next_heartbeat: d.next_heartbeat
         }; 
     });
+
+// Rates for an individual sipper
+db.documents.find({ 
+    "version": "0.09", "id_str": "35ee2311-e935-488f-9ba0-1d8cf10bc61b" 
+})[0].rate.map(rate => [rate.t, rate.r]);
+
+// Export
+mongoexport --db twitter --collection documents --out dump.json
