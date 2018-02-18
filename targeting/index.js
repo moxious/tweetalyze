@@ -6,6 +6,8 @@ const fs = require('fs');
 const parse = require('csv-parse/lib/sync');
 const crypto = require('crypto');
 
+// Usage:  node index.js --sources sources.json
+
 const loadSources = file => {
     console.log('reading ', file);
     const content = fs.readFileSync(file);
@@ -81,14 +83,12 @@ const main = () => {
 
     const sources = loadSources(yargs.argv.sources);
 
-    return partition(sources[0])
-        .then(data => {
-            console.log(data);
-            return writePartitions(sources[0], data);
-        })
-        .then(data => console.log(data))
+    Promise.map(sources, source => {
+        return partition(source)
+            .then(partitions => writePartitions(source, partitions));
+    })
+        .then(collectedFiles => console.log(collectedFiles))
         .catch(err => console.error('ERR', err));
-
 };
 
 main();
