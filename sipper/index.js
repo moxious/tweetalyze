@@ -4,7 +4,7 @@ const Twit = require('twit');
 const moment = require('moment');
 const yargs = require('yargs');
 const Promise = require('bluebird');
-const sipperStatus = require('sipper-status');
+const sipperStatus = require('./sipper-status');
 const DB = require('./DB');
 const Capture = require('./capture');
 const events = require('./events');
@@ -24,9 +24,7 @@ const creds = {
 // Validate startup args.
 if (!creds.consumer_key || !creds.consumer_secret || !creds.access_token || !creds.access_token_secret) {
   throw new Error('Missing credential configuration, check env vars');
-} else if (!process.env.TWITTER_TRACK || !yargs.argv.track) {
-  throw new Error('Please either define TWITTER_TRACK or pass --track param');
-} if (!yargs.argv.label) {
+} else if (!yargs.argv.label) {
   throw new Error('Please call me with --label <name> to name your sipper');
 }
 
@@ -38,7 +36,6 @@ const sipperDetails = {
   checkpoint: moment.utc().valueOf(),
   checkpoint_str: moment.utc().format(),
   rate: [],
-  captureExpression: capture.getCaptureExpression(),
   captured: 0,
   inserted: 0,
   errors: 0,
@@ -59,6 +56,7 @@ const onCaptureChange = (cap, oldC, newC) => {
 }
 
 const capture = new Capture(yargs, yargs.argv.partition, onCaptureChange);
+sipperDetails.captureExpression = capture.getCaptureExpression();
 
 let collection = null;
 let T = null;
@@ -83,7 +81,7 @@ const insertTweet = (tweet, db) => {
         sipperDetails.captured++;
         sipperDetails.inserted += cmdResult.result.n;
         if (sipperDetails.captured % CHECKPOINT_FREQUENCY === 0) {
-          sipperStatus.checkpoint(db, sipperDetails);
+          sipperStatus.checkpoint(db, sipperDetails, CHECKPOINT_FREQUENCY);
         }
       } else {
         events.log(sipperDetails, 'InsertError', cmdResult);
@@ -104,6 +102,15 @@ const insertTweet = (tweet, db) => {
     });
 };
 
+const quitImmediately = () => {
+   events.log(sipperDetails, 'Shutting down immediately');
+   db.disconnect();
+   if (stream) { stream.stop(); }
+   try { capture.watcher.close(); }
+   catch (err) { ; } 
+   process.exit(1);
+};
+
 const beginCapture = (db) => {
   T = new Twit(_.merge(creds, {
     timeout_ms: 60 * 1000,  // optional HTTP request timeout to apply to all requests.
@@ -120,14 +127,7 @@ const beginCapture = (db) => {
 
   const stream = T.stream('statuses/filter', cap.getCaptureExpression());
 
-  process.on('SIGINT', () => {
-    events.log(sipperDetails, 'SIGINT', { message: 'Shutting down' });
-    db.disconnect();
-    if (stream) { stream.stop(); }
-    try { capture.watcher.close(); }
-    catch(err) { ; } 
-    process.exit(1);
-  });
+  process.on('SIGINT', quitImmediately);
 
   events.log(sipperDetails, 'Beginning capture');
 
@@ -158,11 +158,12 @@ const main = () => {
 
   return db.connect()
     .then(() => {
-      sipperStatus.checkpoint(db, sipperStatus);
+      sipperStatus.checkpoint(db, sipperStatus, CHECKPOINT_FREQUENCY);
       return beginCapture(db);
     })
     .catch(err => {
       console.error('Outer error caught; terminating', err, sipperDetails);
+      quitImmediately();
     });
 };
 

@@ -7,7 +7,7 @@ const SIPPER_COLLECTION = 'sipper'; // mongo status docs for sippers
  * @param {*} conn mongodb connection
  * @param {*} sipperDetails object with sipper details to log.
  */
-const checkpoint = (db, sipperDetails) => {
+const checkpoint = (db, sipperDetails, checkpointFrequency) => {
     const collection = db.getConnection().collection(SIPPER_COLLECTION);
 
     const now = moment.utc().valueOf();
@@ -18,14 +18,14 @@ const checkpoint = (db, sipperDetails) => {
 
     // We captured a set in this many ms, meaning our rate is this many
     // tweets/min.
-    const r = CHECKPOINT_FREQUENCY / elapsedTimeMin;
+    const r = checkpointFrequency / elapsedTimeMin;
 
     // An estimate of when the sipper will checkpoint again.  This lets us detect dead 
     // ones that aren't running.
     sipperDetails.next_heartbeat = moment.utc(now + elapsedTimeMs + 1000).format();
 
     // Checkpoint rate for this capture expression.
-    sipperDetails.rate.push({ t: nowStr, r });
+    sipperDetails.rate = r;
 
     sipperDetails.checkpoint = now;
     sipperDetails.checkpoint_str = nowStr;
@@ -35,15 +35,15 @@ const checkpoint = (db, sipperDetails) => {
         'version:', sipperDetails.version,
         'inserted:', sipperDetails.inserted,
         'captured:', sipperDetails.captured,
-        'rate:', sipperDetails.rate.length > 0 ? sipperDetails.rate[sipperDetails.rate.length - 1].r : 0,
+        'rate:', sipperDetails.rate,
         'errors:', sipperDetails.errors,
-        'tracking:', captureExpression.track);
+        'tracking:', sipperDetails.captureExpression.track);
 
     return collection.insert(sipperDetails)
         .catch(err => console.error('Error updating sipper: ', err));
 };
 
-export default {
+module.exports = {
     checkpoint,
 };
 

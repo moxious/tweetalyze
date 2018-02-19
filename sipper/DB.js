@@ -5,7 +5,7 @@ const MONGO_COLLECTION = process.env.MONGO_COLLECTION || 'documents';
 /** 
  * Simple object for gating access to a mongodb connection.
  */
-export default class DB {
+class DB {
     /**
      * Make a new database object.
      * @param {*} url e.g. 'mongodb://localhost:27017'
@@ -27,7 +27,7 @@ export default class DB {
             .then(client => {
                 this.mongoClient = client;
                 this.dbConnection = client.db(this.dbName);
-                this.collection = dbConnection.collection(MONGO_COLLECTION);                          
+                this.collection = this.dbConnection.collection(MONGO_COLLECTION);                          
             })
             .then(() => this);
     }
@@ -42,3 +42,5 @@ export default class DB {
         this.mongoClient = null;
     }
 }
+
+module.exports = DB;

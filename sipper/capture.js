@@ -6,7 +6,7 @@
 const fs = require('fs');
 const _ = require('lodash');
 
-export default class Capture {
+class Capture {
     /**
      * @param {*} yargs args sent to command line program.
      * @param {String} partitionFile
@@ -65,3 +65,6 @@ export default class Capture {
         return this.captureExpression;
     }
 }
+
+module.exports = Capture;
+

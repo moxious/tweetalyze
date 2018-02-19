@@ -1,3 +1,5 @@
+const moment = require('moment');
+
 // Later put in bunyan or something; now lazy.
 const log = (sipper={}, eventType='unknown', obj=null) => {
     console.log(moment.utc().format(),
@@ -15,7 +17,7 @@ const handleError = (sipper, err) => {
         'allErrors:', err.allErrors);
 };
 
-export default {
+module.exports = {
     log,
     handleError,
 };
