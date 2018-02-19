@@ -157,7 +157,8 @@ const beginCapture = (db) => {
 };
 
 const main = () => {
-  const url = process.env.MONGO_URL || 'mongodb://localhost:27017';
+  const url = process.env.MONGO_URL || `mongodb://${process.env.MONGO_USERNAME}:${process.env.MONGO_PASSWORD}@localhost:27017/twitter`;
+	console.log('Connecting ', url);
   const dbName = process.env.MONGO_DB_NAME || 'twitter';
 
   db = new DB(url, dbName);
