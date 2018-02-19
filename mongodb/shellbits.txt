@@ -2,7 +2,7 @@ use twitter;
 
 db.documents.count();
 
-db.documents.createIndex({ id_str: 1 }, { background: true, unique: false })
+db.documents.createIndex({ "id_str": 1 }, { background: true, dropDups: true, unique: true })
 db.documents.createIndex({ "user.screen_name": 1 }, { background: true, unique: false })
 
 // For finding, dealing with sipper status documents.
@@ -32,3 +32,23 @@ db.documents.find({
 
 // Export
 mongoexport --db twitter --collection documents --out dump.json
+
+// Find/remove duplicates if applicable.
+echo "use twitter
+db.documents.aggregate([
+    { $group: {
+        _id: { id_str: "$id_str" },
+        dups: { "$push": "$_id" },
+        count: { $sum: 1 }
+        },
+    },
+    { $match: {
+            count: { "$gt": 1 }
+        }
+    }
+], { allowDiskUse: true }).forEach(function(doc) {
+    doc.dups.shift();
+    db.documents.remove({ "_id": {"$in": doc.dups }});
+});
+
+" | mongo > duplicates.txt 2>&1 & 

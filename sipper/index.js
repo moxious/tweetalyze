@@ -1,41 +1,38 @@
 const uuid = require('uuid');
 const _ = require('lodash');
 const Twit = require('twit');
-const MongoClient = require('mongodb').MongoClient;
 const moment = require('moment');
 const yargs = require('yargs');
 const Promise = require('bluebird');
+const sipperStatus = require('sipper-status');
+const DB = require('./DB');
+const events = require('./events');
 
-const SIPPER_VERSION = '0.09';
+const SIPPER_VERSION = '0.11';
+const MONGO_COLLECTION = process.env.MONGO_COLLECTION || 'documents';
+const CHECKPOINT_FREQUENCY = process.env.SIPPER_CHECKPOINT_FREQUENCY || 1000;
+const SIPPER_DEBUG = process.env.SIPPER_DEBUG;
+const captureExpression = {
+  track: yargs.argv.track || process.env.TWITTER_TRACK,
+};
 
-let creds;
-try {
-  creds = require('./creds.json');
-} catch (err) {
-  creds = {
-    consumer_key: process.env.TWITTER_CONSUMER_KEY,
-    consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
-    access_token: process.env.TWITTER_ACCESS_TOKEN,
-    access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET,
-  };
-}
+const creds = {
+  consumer_key: process.env.TWITTER_CONSUMER_KEY,
+  consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
+  access_token: process.env.TWITTER_ACCESS_TOKEN,
+  access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET,
+};
 
+// Validate startup args.
 if (!creds.consumer_key || !creds.consumer_secret || !creds.access_token || !creds.access_token_secret) {
-  throw new Error('Missing credential configuration');
-} else if (!process.env.TWITTER_TRACK) {
-  throw new Error('Please define TWITTER_TRACK');
+  throw new Error('Missing credential configuration, check env vars');
+} else if (!process.env.TWITTER_TRACK || !yargs.argv.track) {
+  throw new Error('Please either define TWITTER_TRACK or pass --track param');
 } if (!yargs.argv.label) {
   throw new Error('Please call me with --label <name> to name your sipper');
 }
 
-const MONGO_COLLECTION = process.env.MONGO_COLLECTION || 'documents';
-const CHECKPOINT_FREQUENCY = process.env.SIPPER_CHECKPOINT_FREQUENCY || 1000;
-const SIPPER_DEBUG = process.env.SIPPER_DEBUG;
-
-const captureExpression = {
-  track: process.env.TWITTER_TRACK,
-};
-
+// Log entry for tracking progress of a sipper.
 const sipperDetails = {
   id_str: uuid.v4(),
   started_str: moment.utc().format(),
@@ -47,9 +44,10 @@ const sipperDetails = {
   captured: 0,
   inserted: 0,
   errors: 0,
+  duplicates: 0,
   warnings: 0,
   limitNotices: 0,
-  label: yargs.argv.label || 'unnamed sipper',
+  label: yargs.argv.label || 'unnamed',
   version: SIPPER_VERSION,
   next_heartbeat: '',
   // Log which account used for capture, but not secrets.
@@ -57,89 +55,51 @@ const sipperDetails = {
   access_token: creds.access_token,
 };
 
-const sipperID = uuid.v4();
-
-const url = 'mongodb://localhost:27017';
-const dbName = 'twitter';
-let mongoClient = null;
-let dbConnection = null;
 let collection = null;
 let T = null;
 
-const checkpoint = (update = false) => {
-  const now = moment.utc().valueOf();
-  const nowStr = moment.utc(now).format();
-
-  const elapsedTimeMs = now - sipperDetails.checkpoint;
-  const elapsedTimeMin = elapsedTimeMs / 1000 / 60;
-  
-  // We captured a set in this many ms, meaning our rate is this many
-  // tweets/min.
-  const r = CHECKPOINT_FREQUENCY / elapsedTimeMin;
-  
-  // An estimate of when the sipper will checkpoint again.  This lets us detect dead 
-  // ones that aren't running.
-  sipperDetails.next_heartbeat = moment.utc(now + elapsedTimeMs + 1000).format();
-
-  // Checkpoint rate for this capture expression.
-  sipperDetails.rate.push({ t: nowStr, r });
-
-  sipperDetails.checkpoint = now;
-  sipperDetails.checkpoint_str = nowStr;
-
-  console.log(moment.utc().format(),
-    'Checkpoint ', sipperDetails.id_str,
-    'version:', sipperDetails.version,
-    'inserted:', sipperDetails.inserted,
-    'captured:', sipperDetails.captured,
-    'rate:', sipperDetails.rate.length > 0 ? sipperDetails.rate[sipperDetails.rate.length - 1].r : 0,
-    'errors:', sipperDetails.errors,
-    'tracking:', captureExpression.track);
-
-  const op = update ? { $set: sipperDetails } : { $setOnInsert: sipperDetails };
-  const options = { upsert: true };
-
-  return collection.updateOne({ id_str: sipperDetails.id_str }, op, options)
-    .catch(err => console.error('Error updating sipper: ', err));
-};
-
-const insertTweet = tweet => {
+/**
+ * Put single captured tweet into the DB.
+ * @param {*} tweet object from streaming API
+ * @param {*} db instance of DB class.
+ * @returns {Promise}
+ */
+const insertTweet = (tweet, db) => {
   const findCriteria = _.pick(tweet, ["id_str"]);
 
+  if (!collection) {
+    collection = db.getConnection().collection(MONGO_COLLECTION);
+  }
+
   // Depends on id_str index.
-  return collection.updateOne(findCriteria, { $setOnInsert: tweet }, { upsert: true })
+  return collection.insert(tweet)
     .then(cmdResult => {
       if (cmdResult.result.ok) {
         sipperDetails.captured++;
         sipperDetails.inserted += cmdResult.result.n;
         if (sipperDetails.captured % CHECKPOINT_FREQUENCY === 0) {
-          checkpoint(true);
+          sipperStatus.checkpoint(db, sipperDetails);
         }
       } else {
-        console.log('err', cmdResult);
+        events.log(sipperDetails, 'InsertError', cmdResult);
         sipperDetails.errors++;
       }
     })
-    .catch(err => console.error('Upsert failed: ', err));
+    .catch(err => {
+      if (err.message && err.message.indexOf('duplicate key error')) {
+        // Fine, ignorable; we just skipped inserting a dupe.
+        sipperStatus.duplicates++;
+      } else {
+        sipperStatus.errors++;
+        events.log(sipperDetails, 'Tweet insert failed', {
+          name: err.name,
+          message: err.message,
+        });
+      }
+    });
 };
 
-const log = (eventType, obj) => {
-  console.error(moment.utc().format(),
-    eventType, sipperDetails.id_str,
-    'label:', sipperDetails.label,
-    obj);
-};
-
-const handleError = err => {
-  console.error(moment.utc().format(),
-    'Error', sipperDetails.id_str,
-    'label:', sipperDetails.label,
-    'message:', err.message,
-    'code:', err.code,
-    'allErrors:', err.allErrors);
-};
-
-const beginCapture = () => {
+const beginCapture = (db) => {
   T = new Twit(_.merge(creds, {
     timeout_ms: 60 * 1000,  // optional HTTP request timeout to apply to all requests.
   }));
@@ -147,54 +107,57 @@ const beginCapture = () => {
   // Sample query to see if auth works, etc.
   T.get('statuses/home_timeline', function (err, reply) {
     if (err) {
-      return log('API Not Working', err);
+      return events.log(sipperDetails, 'API Not Working', err);
     } else {
-      log('API Working', !_.isEmpty(reply));
+      return events.log(sipperDetails, 'API Working', !_.isEmpty(reply));
     }
   });
 
   const stream = T.stream('statuses/filter', captureExpression)
 
   process.on('SIGINT', () => {
-    log('SIGINT', { message: 'Shutting down' });
-    mongoClient.close();
+    events.log(sipperDetails, 'SIGINT', { message: 'Shutting down' });
+    db.disconnect();
     if (stream) { stream.stop(); }
     process.exit(1);
   });
 
-  console.log('Beginning capture');
+  events.log(sipperDetails, 'Beginning capture');
 
-  stream.on('tweet', insertTweet);
-  stream.on('error', handleError);
+  // Various kinds of stream events which can occur...
+
+  stream.on('tweet', tweet => insertTweet(tweet, db));
+  stream.on('error', err => handleError(sipperDetails, err));
   stream.on('limit', msg => {
     // Limit notices indicate you're asking for more data than streaming API
     // can send.  Increment this counter. For large values, we're missing a lot.
     sipperDetails.limitNotices++;
   });
-  stream.on('disconnect', msg => log('Disconnect', msg));
+  stream.on('disconnect', msg => events.log(sipperDetails, 'Disconnect', msg));
   stream.on('warning', msg => {
     sipperDetails.warnings++;
-    log('Warning', msg);
+    events.log(sipperDetails, 'Warning', msg);
   });
-  stream.on('status_withheld', msg => log('Withheld', msg));
-  stream.on('scrub_geo', msg => log('ScrubGeo', msg));
-  stream.on('connected', msg => log('Connected', {}));
+  stream.on('status_withheld', msg => events.log(sipperDetails, 'Withheld', msg));
+  stream.on('scrub_geo', msg => events.log(sipperDetails, 'ScrubGeo', msg));
+  stream.on('connected', msg => events.log(sipperDetails, 'Connected'));
 };
 
 const main = () => {
-  return MongoClient.connect(url)
-    .then(client => {
-      mongoClient = client;
-      dbConnection = client.db(dbName);
-      collection = dbConnection.collection(MONGO_COLLECTION);
+  const url = process.env.MONGO_URL || 'mongodb://localhost:27017';
+  const dbName = process.env.MONGO_DB_NAME || 'twitter';
 
-      checkpoint();
-      return beginCapture();
+  const db = new DB(url, dbName);
+
+  return db.connect()
+    .then(() => {
+      sipperStatus.checkpoint(db, sipperStatus);
+      return beginCapture(db);
     })
     .catch(err => {
-      console.error('Outer error caught; terminating', err);
+      console.error('Outer error caught; terminating', err, sipperDetails);
     });
 };
 
-
+/*********************************************/
 main();
