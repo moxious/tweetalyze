@@ -41,7 +41,9 @@ const checkpoint = (db, sipperDetails, checkpointFrequency) => {
         'tracking:', _.get(sipperDetails.captureExpression, 'track'));
 
     return collection.insert(sipperDetails)
-	.then(r => console.log(r.result))
+        // Super annoying, mongo modifies this data to add an ID.
+        // have to remove it, or it clashes on next insert.
+	    .then(r => { delete sipperDetails._id; })
         .catch(err => console.error('Error updating sipper: ', err));
 };
 
