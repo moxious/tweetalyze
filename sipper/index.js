@@ -53,10 +53,13 @@ const sipperDetails = {
   access_token: creds.access_token,
 };
 
-const onCaptureChange = (cap, oldC, newC) => {
+const onCaptureChange = (cap, newC, oldC) => {
   sipperDetails.captureExpression = cap.getCaptureExpression();
-  console.log('OLD=', oldC, 'newC=', newC);
-}
+  events.log(sipperDetails, 'Capture partition changed', {
+     oldExpression: oldC,
+     newExpression: newC,
+  });
+};
 
 const capture = new Capture(yargs, yargs.argv.partition, onCaptureChange);
 sipperDetails.captureExpression = capture.getCaptureExpression();

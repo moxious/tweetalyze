@@ -17,6 +17,8 @@ class Capture {
     constructor(yargs, partitionFile, callback) {
         this.partitionFile = partitionFile;
         this.partitionData = null;
+	this.callback = callback;
+
         if (!callback) {
             throw new Error('Must provide change callback');
         }
