@@ -4,7 +4,7 @@ const Twit = require('twit');
 const moment = require('moment');
 const yargs = require('yargs');
 const Promise = require('bluebird');
-const sipperStatus = require('./sipper-status');
+const sip = require('./sipper-status');
 const DB = require('./DB');
 const Capture = require('./capture');
 const events = require('./events');
@@ -13,6 +13,9 @@ const SIPPER_VERSION = '0.11';
 const MONGO_COLLECTION = process.env.MONGO_COLLECTION || 'documents';
 const CHECKPOINT_FREQUENCY = process.env.SIPPER_CHECKPOINT_FREQUENCY || 1000;
 const SIPPER_DEBUG = process.env.SIPPER_DEBUG;
+
+let db = null;
+let stream = null;
 
 const creds = {
   consumer_key: process.env.TWITTER_CONSUMER_KEY,
@@ -81,7 +84,7 @@ const insertTweet = (tweet, db) => {
         sipperDetails.captured++;
         sipperDetails.inserted += cmdResult.result.n;
         if (sipperDetails.captured % CHECKPOINT_FREQUENCY === 0) {
-          sipperStatus.checkpoint(db, sipperDetails, CHECKPOINT_FREQUENCY);
+          sip.checkpoint(db, sipperDetails, CHECKPOINT_FREQUENCY);
         }
       } else {
         events.log(sipperDetails, 'InsertError', cmdResult);
@@ -91,9 +94,9 @@ const insertTweet = (tweet, db) => {
     .catch(err => {
       if (err.message && err.message.indexOf('duplicate key error')) {
         // Fine, ignorable; we just skipped inserting a dupe.
-        sipperStatus.duplicates++;
+        sipperDetails.duplicates++;
       } else {
-        sipperStatus.errors++;
+        sipperDetails.errors++;
         events.log(sipperDetails, 'Tweet insert failed', {
           name: err.name,
           message: err.message,
@@ -125,11 +128,11 @@ const beginCapture = (db) => {
     }
   });
 
-  const stream = T.stream('statuses/filter', cap.getCaptureExpression());
+  stream = T.stream('statuses/filter', capture.getCaptureExpression());
 
   process.on('SIGINT', quitImmediately);
 
-  events.log(sipperDetails, 'Beginning capture');
+  events.log(sipperDetails, 'Beginning capture checkpointing', CHECKPOINT_FREQUENCY);
 
   // Various kinds of stream events which can occur...
 
@@ -154,11 +157,11 @@ const main = () => {
   const url = process.env.MONGO_URL || 'mongodb://localhost:27017';
   const dbName = process.env.MONGO_DB_NAME || 'twitter';
 
-  const db = new DB(url, dbName);
+  db = new DB(url, dbName);
 
   return db.connect()
     .then(() => {
-      sipperStatus.checkpoint(db, sipperStatus, CHECKPOINT_FREQUENCY);
+      sip.checkpoint(db, sipperDetails, CHECKPOINT_FREQUENCY);
       return beginCapture(db);
     })
     .catch(err => {

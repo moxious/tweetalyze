@@ -1,5 +1,6 @@
 const moment = require('moment');
 const uuid = require('uuid');
+const _ = require('lodash');
 
 const SIPPER_COLLECTION = 'sipper'; // mongo status docs for sippers
 
@@ -37,9 +38,10 @@ const checkpoint = (db, sipperDetails, checkpointFrequency) => {
         'captured:', sipperDetails.captured,
         'rate:', sipperDetails.rate,
         'errors:', sipperDetails.errors,
-        'tracking:', sipperDetails.captureExpression.track);
+        'tracking:', _.get(sipperDetails.captureExpression, 'track'));
 
     return collection.insert(sipperDetails)
+	.then(r => console.log(r.result))
         .catch(err => console.error('Error updating sipper: ', err));
 };
 
