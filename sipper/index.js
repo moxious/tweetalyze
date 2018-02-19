@@ -6,15 +6,13 @@ const yargs = require('yargs');
 const Promise = require('bluebird');
 const sipperStatus = require('sipper-status');
 const DB = require('./DB');
+const Capture = require('./capture');
 const events = require('./events');
 
 const SIPPER_VERSION = '0.11';
 const MONGO_COLLECTION = process.env.MONGO_COLLECTION || 'documents';
 const CHECKPOINT_FREQUENCY = process.env.SIPPER_CHECKPOINT_FREQUENCY || 1000;
 const SIPPER_DEBUG = process.env.SIPPER_DEBUG;
-const captureExpression = {
-  track: yargs.argv.track || process.env.TWITTER_TRACK,
-};
 
 const creds = {
   consumer_key: process.env.TWITTER_CONSUMER_KEY,
@@ -40,7 +38,7 @@ const sipperDetails = {
   checkpoint: moment.utc().valueOf(),
   checkpoint_str: moment.utc().format(),
   rate: [],
-  captureExpression,
+  captureExpression: capture.getCaptureExpression(),
   captured: 0,
   inserted: 0,
   errors: 0,
@@ -54,6 +52,13 @@ const sipperDetails = {
   consumer_key: creds.consumer_key,
   access_token: creds.access_token,
 };
+
+const onCaptureChange = (cap, oldC, newC) => {
+  sipperDetails.captureExpression = cap.getCaptureExpression();
+  console.log('OLD=', oldC, 'newC=', newC);
+}
+
+const capture = new Capture(yargs, yargs.argv.partition, onCaptureChange);
 
 let collection = null;
 let T = null;
@@ -113,12 +118,14 @@ const beginCapture = (db) => {
     }
   });
 
-  const stream = T.stream('statuses/filter', captureExpression)
+  const stream = T.stream('statuses/filter', cap.getCaptureExpression());
 
   process.on('SIGINT', () => {
     events.log(sipperDetails, 'SIGINT', { message: 'Shutting down' });
     db.disconnect();
     if (stream) { stream.stop(); }
+    try { capture.watcher.close(); }
+    catch(err) { ; } 
     process.exit(1);
   });
 
