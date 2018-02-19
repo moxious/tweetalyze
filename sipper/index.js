@@ -38,7 +38,7 @@ const sipperDetails = {
   started: moment.utc().valueOf(),
   checkpoint: moment.utc().valueOf(),
   checkpoint_str: moment.utc().format(),
-  rate: [],
+  rate: 0,
   captured: 0,
   inserted: 0,
   errors: 0,
@@ -59,6 +59,9 @@ const onCaptureChange = (cap, newC, oldC) => {
      oldExpression: oldC,
      newExpression: newC,
   });
+
+  // Apply changes to twitter stream.
+  restartStream();
 };
 
 const capture = new Capture(yargs, yargs.argv.partition, onCaptureChange);
@@ -108,13 +111,42 @@ const insertTweet = (tweet, db) => {
     });
 };
 
-const quitImmediately = () => {
+const quitGracefully = () => {
    events.log(sipperDetails, 'Shutting down immediately');
-   db.disconnect();
+   
    if (stream) { stream.stop(); }
    try { capture.watcher.close(); }
    catch (err) { ; } 
+   
+   db.disconnect(); 
    process.exit(1);
+};
+
+const restartStream = () => {
+  if (!T) { throw new Error('You must first authenticate to twitter'); }
+
+  if (stream && stream.stop) {
+    events.log(sipperDetails, 'Restarting stream');
+    stream.stop();  // Close connection on last query set.
+  }
+
+  stream = T.stream('statuses/filter', capture.getCaptureExpression());
+  stream.on('tweet', tweet => insertTweet(tweet, db));
+  stream.on('error', err => handleError(sipperDetails, err));
+  stream.on('limit', msg => {
+    // Limit notices indicate you're asking for more data than streaming API
+    // can send.  Increment this counter. For large values, we're missing a lot.
+    sipperDetails.limitNotices++;
+  });
+  stream.on('disconnect', msg => events.log(sipperDetails, 'Disconnect', msg));
+  stream.on('warning', msg => {
+    sipperDetails.warnings++;
+    events.log(sipperDetails, 'Warning', msg);
+  });
+  stream.on('status_withheld', msg => events.log(sipperDetails, 'Withheld', msg));
+  stream.on('scrub_geo', msg => events.log(sipperDetails, 'ScrubGeo', msg));
+  stream.on('connected', msg => events.log(sipperDetails, 'Connected'));
+  return stream;
 };
 
 const beginCapture = (db) => {
@@ -131,29 +163,11 @@ const beginCapture = (db) => {
     }
   });
 
-  stream = T.stream('statuses/filter', capture.getCaptureExpression());
+  restartStream();
 
-  process.on('SIGINT', quitImmediately);
+  process.on('SIGINT', quitGracefully);
 
   events.log(sipperDetails, 'Beginning capture checkpointing', CHECKPOINT_FREQUENCY);
-
-  // Various kinds of stream events which can occur...
-
-  stream.on('tweet', tweet => insertTweet(tweet, db));
-  stream.on('error', err => handleError(sipperDetails, err));
-  stream.on('limit', msg => {
-    // Limit notices indicate you're asking for more data than streaming API
-    // can send.  Increment this counter. For large values, we're missing a lot.
-    sipperDetails.limitNotices++;
-  });
-  stream.on('disconnect', msg => events.log(sipperDetails, 'Disconnect', msg));
-  stream.on('warning', msg => {
-    sipperDetails.warnings++;
-    events.log(sipperDetails, 'Warning', msg);
-  });
-  stream.on('status_withheld', msg => events.log(sipperDetails, 'Withheld', msg));
-  stream.on('scrub_geo', msg => events.log(sipperDetails, 'ScrubGeo', msg));
-  stream.on('connected', msg => events.log(sipperDetails, 'Connected'));
 };
 
 const main = () => {
@@ -170,7 +184,7 @@ const main = () => {
     })
     .catch(err => {
       console.error('Outer error caught; terminating', err, sipperDetails);
-      quitImmediately();
+      quitGracefully();
     });
 };
 
