@@ -8,33 +8,62 @@ const crypto = require('crypto');
 
 // Usage:  node index.js --sources sources.json
 
-const loadSources = file => {
+const loadPartitionMap = file => {
     console.log('reading ', file);
     const content = fs.readFileSync(file);
-    const sources = JSON.parse(content);
+    const partitionMap = JSON.parse(content);
+    const sources = partitionMap.sources;
+
+    if (!partitionMap.settings) {
+        throw new Error('Partition map must have settings present');
+    }
+
+    if (!partitionMap.settings.partitions || 
+        partitionMap.settings.filenames.length !== partitionMap.settings.partitions) {
+        throw new Error('Partition map must have as many filenames as partitions');
+    }
+
+    if (!sources || !sources.length) {
+        throw new Error('Partition map must have non-empty sources array');
+    }
 
     // Must have all required keys
     const invalid = sources.filter(source => (!source.name || !source.url || 
-        !source.partitionKey || !source.partitionSize));
+        !source.partitionKey));
 
     if (invalid.length > 0) {
         throw new Error('Invalid source entries' + invalid);
     }
 
-    return sources;
+    return partitionMap;
 };
 
 const getSource = source =>
     request(source.url).then(data => parse(data, { columns: true }));
 
-const writePartitions = (source, partitions) => {
+const partition = (partitionMap, allRecords) => {
+    // Needs revisiting. We're partitioning things with different data
+    // volumes (hashtags, accounts, topics).  That's why we round robin
+    // and don't just put the first n into the first partition, because
+    // you'd end up with a very high volume partition of all hashtags.
+
+    // Init [ [], [], [] ]
+    const partitions = _.range(partitionMap.settings.partitions).map(() => []);
+
+    for (let i=0; i<allRecords.length; i++) {
+        // Round robin
+        const partitionIdx = i % partitionMap.settings.partitions;
+        console.log(i + ' => ' + allRecords[i] + ' => ' + partitionIdx);
+        partitions[partitionIdx].push(allRecords[i]);
+    }
+
+    return partitions;
+};
+
+const writePartitions = (partitionMap, partitions) => {
     const writtenFiles = [];
     partitions.forEach((partition, idx) => {
-        if (partition.length > source.partitionSize) {
-            throw new Error('Something went wrong, partition too big!');
-        }
-
-        const filename = `${source.name}-${idx}.part.txt`;
+        const filename = partitionMap.settings.filenames[idx];
         const hashFilename = `${filename}.sha`;
         const filedata = partition.join(',');
         
@@ -52,7 +81,7 @@ const writePartitions = (source, partitions) => {
     return writtenFiles;
 };
 
-const partition = source =>
+const loadSourceRecords = source =>
     getSource(source)
         .then(records => {
             const count = records.length;
@@ -72,21 +101,19 @@ const partition = source =>
 
             console.log('Found ', validPartitionKeys.length, 'in', count, 'source items');
             return validPartitionKeys;
-        })
-        // Chunk breaks it up into groups of partitionSize.
-        .then(validPartitionKeys => _.chunk(validPartitionKeys, source.partitionSize));
+        });
 
 const main = () => {
-    if (!yargs.argv.sources) {
-        throw new Error('Call me with --sources file.json');
+    if (!yargs.argv.map) {
+        throw new Error('Call me with --map file.json');
     }
 
-    const sources = loadSources(yargs.argv.sources);
+    const partitionMap = loadPartitionMap(yargs.argv.map);
 
-    Promise.map(sources, source => {
-        return partition(source)
-            .then(partitions => writePartitions(source, partitions));
-    })
+    return Promise.map(partitionMap.sources, source => loadSourceRecords(source))
+        .then(partitions => _.flatten(partitions))
+        .then(allRecords => partition(partitionMap, allRecords))
+        .then(partitions => writePartitions(partitionMap, partitions))
         .then(collectedFiles => console.log(collectedFiles))
         .catch(err => console.error('ERR', err));
 };
