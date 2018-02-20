@@ -40,7 +40,7 @@ class Capture {
             // Watch the file and reload it whenever
             this.watcher = fs.watch(this.partitionFile, eventType => {
                 if (eventType === 'change') {
-                    this.loadPartition(true);
+                    setTimeout(() => this.loadPartition(true), 500);
                 }
             });
         }
@@ -57,9 +57,9 @@ class Capture {
 
         if (!this.partitionData && this.captureExpression.track) {
             // Try not to crash if file is messed up
-            console.warn(`Invalid partition data in ${partitionFile} continuing with last tracker`);
+            console.warn(`Invalid partition data in ${this.partitionFile} continuing with last tracker`);
         } else if (!this.partitionData) {
-            throw new Error(`Partition file ${partitionFile} missing/invalid data, cannot continue`);
+            throw new Error(`Partition file ${this.partitionFile} missing/invalid data, cannot continue`);
         }    
 
         this.lastCaptureExpression = _.cloneDeep(this.captureExpression);
